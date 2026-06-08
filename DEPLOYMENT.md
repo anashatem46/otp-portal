@@ -19,6 +19,13 @@ SEED_ADMIN_PASSWORD=
 SEED_ADMIN_MUST_CHANGE_PASSWORD=false
 ```
 
+`DATABASE_URL` must be a hosted PostgreSQL connection string, for example from Neon or
+Supabase. Do not use `localhost`, `127.0.0.1`, or the local Docker URL in Vercel;
+Vercel cannot connect to a database running on your laptop.
+
+If you create the database through Vercel's storage/integration UI and it asks for
+a custom prefix, use `DATABASE` so it creates `DATABASE_URL`.
+
 Generate `ENCRYPTION_KEY` with:
 
 ```sh
@@ -32,19 +39,17 @@ Use a long random `SESSION_SECRET`.
 1. Push this repo to GitHub.
 2. Import it in Vercel.
 3. Add the production environment variables.
-4. Run database migrations against Neon:
+4. Deploy from Vercel. The Vercel build command runs production migrations with:
 
    ```sh
    npm run prisma:migrate:deploy
    ```
 
-5. Seed the first admin:
+5. Seed the first admin once against the production database:
 
    ```sh
    npm run seed
    ```
-
-6. Deploy from Vercel.
 
 ## Before Public Production
 
