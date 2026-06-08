@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                 String          @id @default(cuid())
+  name               String?
+  username           String          @unique
+  email              String          @unique
+  passwordHash       String
+  role               Role            @default(USER)
+  isActive           Boolean         @default(true)
+  mustChangePassword Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  sessions           Session[]
+  otpAccesses        OtpAccess[]
+  accessRequests     AccessRequest[] @relation("AccessRequestUser")
+  reviewedRequests   AccessRequest[] @relation("AccessRequestReviewer")
+  auditEvents        AuditLog[]      @relation("AuditLogUser")
+  adminAuditEvents   AuditLog[]      @relation("AuditLogAdmin")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model SharedAccount {
+  id              String          @id @default(cuid())
+  name            String          @unique
+  encryptedSecret String
+  iv              String
+  authTag         String
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  otpAccesses     OtpAccess[]
+  accessRequests  AccessRequest[]
+  auditLogs       AuditLog[]
+}
+
+model OtpAccess {
+  id             String        @id @default(cuid())
+  userId         String
+  accountId      String
+  remainingViews Int           @default(1)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account        SharedAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountId])
+  @@index([accountId])
+}
+
+model AccessRequest {
+  id             String              @id @default(cuid())
+  userId         String
+  accountId      String
+  requestedViews Int
+  reason         String
+  status         AccessRequestStatus @default(PENDING)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  user           User                @relation("AccessRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer       User?               @relation("AccessRequestReviewer", fields: [reviewedBy], references: [id])
+  account        SharedAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([userId])
+  @@index([accountId])
+}
+
+model AuditLog {
+  id        String         @id @default(cuid())
+  userId    String?
+  adminId   String?
+  accountId String?
+  action    String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime       @default(now())
+  user      User?          @relation("AuditLogUser", fields: [userId], references: [id])
+  admin     User?          @relation("AuditLogAdmin", fields: [adminId], references: [id])
+  account   SharedAccount? @relation(fields: [accountId], references: [id])
+
+  @@index([action])
+  @@index([userId])
+  @@index([adminId])
+  @@index([accountId])
+  @@index([createdAt])
+}
+
+model RateLimit {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  count       Int      @default(1)
+  windowStart DateTime
+  updatedAt   DateTime @updatedAt
+}
