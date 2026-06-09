@@ -61,7 +61,8 @@ export function clearSessionCookie(response: NextResponse) {
 }
 
 export async function deleteCurrentSession() {
-  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!token) {
     return;
@@ -75,7 +76,8 @@ export async function deleteCurrentSession() {
 }
 
 export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
-  const token = cookies().get(SESSION_COOKIE_NAME)?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!token) {
     return null;

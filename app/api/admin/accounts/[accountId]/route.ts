@@ -5,19 +5,20 @@ import { requireAdmin } from "@/lib/session";
 import { updateAccountSchema } from "@/lib/validation";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     accountId: string;
-  };
+  }>;
 };
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const admin = await requireAdmin();
+    const { accountId } = await params;
     const body = updateAccountSchema.parse(await request.json());
 
     const account = await updateSharedAccount({
       adminId: admin.id,
-      accountId: params.accountId,
+      accountId,
       name: body.name,
       totpSecret: body.totpSecret || undefined,
       isActive: body.isActive,
@@ -39,10 +40,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 export async function DELETE(request: Request, { params }: RouteContext) {
   try {
     const admin = await requireAdmin();
+    const { accountId } = await params;
 
     await deleteSharedAccount({
       adminId: admin.id,
-      accountId: params.accountId,
+      accountId,
       metadata: getRequestMetadata(request)
     });
 
