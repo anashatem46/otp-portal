@@ -7,6 +7,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"]
+      },
       colors: {
         ink: "#17201b",
         field: "#f4f6f3",
@@ -25,3 +28,4 @@ const config: Config = {
 };
 
 export default config;
+

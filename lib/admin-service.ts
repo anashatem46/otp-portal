@@ -289,6 +289,8 @@ export async function createSharedAccount(
   input: {
     adminId: string;
     name: string;
+    category?: string | null;
+    sharedByLabel?: string | null;
     totpSecret: string;
     isActive: boolean;
     initialViewsForExistingUsers: number;
@@ -302,6 +304,8 @@ export async function createSharedAccount(
     const account = await tx.sharedAccount.create({
       data: {
         name: input.name,
+        category: input.category ?? null,
+        sharedByLabel: input.sharedByLabel ?? null,
         encryptedSecret: encryptedSecret.encryptedSecret,
         iv: encryptedSecret.iv,
         authTag: encryptedSecret.authTag,
@@ -352,6 +356,8 @@ export async function updateSharedAccount(
     adminId: string;
     accountId: string;
     name: string;
+    category?: string | null;
+    sharedByLabel?: string | null;
     totpSecret?: string;
     isActive: boolean;
     metadata: RequestMetadata;
@@ -384,6 +390,8 @@ export async function updateSharedAccount(
       },
       data: {
         name: input.name,
+        category: input.category ?? null,
+        sharedByLabel: input.sharedByLabel ?? null,
         isActive: input.isActive,
         ...(encryptedSecret
           ? {

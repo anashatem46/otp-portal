@@ -54,6 +54,8 @@ model Session {
 model SharedAccount {
   id              String          @id @default(cuid())
   name            String          @unique
+  category        String?
+  sharedByLabel   String?
   encryptedSecret String
   iv              String
   authTag         String

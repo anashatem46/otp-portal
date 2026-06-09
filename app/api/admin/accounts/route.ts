@@ -12,6 +12,8 @@ export async function POST(request: Request) {
     const account = await createSharedAccount({
       adminId: admin.id,
       name: body.name,
+      category: body.category,
+      sharedByLabel: body.sharedByLabel,
       totpSecret: body.totpSecret,
       isActive: body.isActive,
       initialViewsForExistingUsers: body.initialViewsForExistingUsers,

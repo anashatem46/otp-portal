@@ -4,8 +4,18 @@
 
 :root {
   color-scheme: light;
-  --background: #f7f8f5;
+  --background: #f9fafb;
   --foreground: #17201b;
+
+  /* Avatar palette — deterministic from account name hash */
+  --avatar-emerald: #355e43;
+  --avatar-teal: #0d9488;
+  --avatar-blue: #2563eb;
+  --avatar-violet: #7c3aed;
+  --avatar-rose: #e11d48;
+  --avatar-amber: #d97706;
+  --avatar-slate: #475569;
+  --avatar-cyan: #0891b2;
 }
 
 * {
@@ -15,10 +25,10 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(247, 248, 245, 0)),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -30,4 +40,21 @@ textarea {
 
 code {
   font-variant-ligatures: none;
+}
+
+/* Active nav tab indicator */
+.nav-tab-active {
+  color: #17201b;
+  font-weight: 600;
+}
+
+.nav-tab-active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #355e43;
+  border-radius: 1px;
 }

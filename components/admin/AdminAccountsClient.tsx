@@ -14,6 +14,8 @@ import {
 type AccountRow = {
   id: string;
   name: string;
+  category: string | null;
+  sharedByLabel: string | null;
   isActive: boolean;
   createdAt: string;
   _count: {
@@ -67,6 +69,8 @@ export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
       "/api/admin/accounts",
       {
         name: form.get("name"),
+        category: form.get("category") || null,
+        sharedByLabel: form.get("sharedByLabel") || null,
         totpSecret: form.get("totpSecret"),
         initialViewsForExistingUsers: form.get("initialViewsForExistingUsers"),
         isActive: form.get("isActive") === "on"
@@ -91,6 +95,8 @@ export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
       `/api/admin/accounts/${accountId}`,
       {
         name: form.get("name"),
+        category: form.get("category") || null,
+        sharedByLabel: form.get("sharedByLabel") || null,
         totpSecret: form.get("totpSecret"),
         isActive: form.get("isActive") === "on"
       },
@@ -106,32 +112,44 @@ export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
           <KeyRound size={18} className="text-moss" />
           <h2 className="font-semibold">Add Shared Account</h2>
         </div>
-        <form className="grid gap-3 lg:grid-cols-[1fr_1fr_160px_120px]" onSubmit={createAccount}>
-          <label className="grid gap-1 text-xs font-medium text-slate-700">
-            Account name
-            <input className={inputClass} name="name" required />
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-slate-700">
-            TOTP secret
-            <input className={inputClass} name="totpSecret" required />
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-slate-700">
-            Initial views
-            <input
-              className={inputClass}
-              name="initialViewsForExistingUsers"
-              type="number"
-              min={0}
-              max={1000}
-              defaultValue={1}
-              required
-            />
-          </label>
-          <label className="flex items-end gap-2 pb-2 text-sm font-medium">
-            <input name="isActive" type="checkbox" defaultChecked />
-            Active
-          </label>
-          <div className="lg:col-span-4">
+        <form className="grid gap-3" onSubmit={createAccount}>
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_160px_120px]">
+            <label className="grid gap-1 text-xs font-medium text-slate-700">
+              Account name
+              <input className={inputClass} name="name" required />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-700">
+              TOTP secret
+              <input className={inputClass} name="totpSecret" required />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-700">
+              Initial views
+              <input
+                className={inputClass}
+                name="initialViewsForExistingUsers"
+                type="number"
+                min={0}
+                max={1000}
+                defaultValue={1}
+                required
+              />
+            </label>
+            <label className="flex items-end gap-2 pb-2 text-sm font-medium">
+              <input name="isActive" type="checkbox" defaultChecked />
+              Active
+            </label>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <label className="grid gap-1 text-xs font-medium text-slate-700">
+              Category
+              <input className={inputClass} name="category" placeholder="e.g. AI, Dev, Design" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-700">
+              Shared by label
+              <input className={inputClass} name="sharedByLabel" placeholder="e.g. system, anas" />
+            </label>
+          </div>
+          <div>
             <button className={buttonClass} disabled={pending !== ""}>
               <Plus size={16} />
               {pending === "/api/admin/accounts" ? "Creating" : "Create account"}

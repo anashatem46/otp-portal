@@ -13,6 +13,8 @@ export default async function DashboardPage() {
     select: {
       id: true,
       name: true,
+      category: true,
+      sharedByLabel: true,
       otpAccesses: {
         where: {
           userId: user.id
@@ -29,16 +31,12 @@ export default async function DashboardPage() {
 
   return (
     <AppShell user={user}>
-      <div className="mb-5">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          View shared account codes and request more access.
-        </p>
-      </div>
       <DashboardClient
         accounts={accounts.map((account) => ({
           id: account.id,
           name: account.name,
+          category: account.category ?? undefined,
+          sharedByLabel: account.sharedByLabel ?? undefined,
           remainingViews: account.otpAccesses[0]?.remainingViews ?? 0,
           isUnlimited: user.role === Role.ADMIN
         }))}

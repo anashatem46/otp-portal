@@ -33,6 +33,8 @@ export default async function AdminAccountsPage() {
         accounts={accounts.map((account) => ({
           id: account.id,
           name: account.name,
+          category: account.category,
+          sharedByLabel: account.sharedByLabel,
           isActive: account.isActive,
           createdAt: account.createdAt.toLocaleString(),
           _count: account._count

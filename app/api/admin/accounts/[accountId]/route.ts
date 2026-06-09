@@ -19,6 +19,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       adminId: admin.id,
       accountId: params.accountId,
       name: body.name,
+      category: body.category,
+      sharedByLabel: body.sharedByLabel,
       totpSecret: body.totpSecret || undefined,
       isActive: body.isActive,
       metadata: getRequestMetadata(request)

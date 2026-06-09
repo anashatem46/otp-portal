@@ -36,6 +36,8 @@ export const createUserSchema = z.object({
 
 export const createAccountSchema = z.object({
   name: z.string().trim().min(2).max(120),
+  category: z.string().trim().max(60).nullable().optional(),
+  sharedByLabel: z.string().trim().max(120).nullable().optional(),
   totpSecret: z.string().trim().min(6),
   isActive: z.boolean().default(true),
   initialViewsForExistingUsers: z.coerce.number().int().min(0).max(1000).default(1)
@@ -43,6 +45,8 @@ export const createAccountSchema = z.object({
 
 export const updateAccountSchema = z.object({
   name: z.string().trim().min(2).max(120),
+  category: z.string().trim().max(60).nullable().optional(),
+  sharedByLabel: z.string().trim().max(120).nullable().optional(),
   totpSecret: z.string().trim().optional().or(z.literal("")),
   isActive: z.boolean()
 });
