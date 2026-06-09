@@ -4,18 +4,19 @@ import { getRequestMetadata, jsonError } from "@/lib/http";
 import { requireAdmin } from "@/lib/session";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     requestId: string;
-  };
+  }>;
 };
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const admin = await requireAdmin();
+    const { requestId } = await params;
 
     const accessRequest = await reviewAccessRequest({
       adminId: admin.id,
-      requestId: params.requestId,
+      requestId,
       approve: true,
       metadata: getRequestMetadata(request)
     });

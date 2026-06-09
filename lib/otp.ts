@@ -1,15 +1,20 @@
-import { authenticator } from "otplib";
+import { createGuardrails, generateSecret, generateSync } from "otplib";
 
 const STEP_SECONDS = 30;
+const MIN_COMPATIBLE_SECRET_BYTES = 10;
 export const MIN_VISIBLE_OTP_SECONDS = 20;
-
-authenticator.options = {
-  digits: 6,
-  step: STEP_SECONDS
-};
+const OTP_GUARDRAILS = createGuardrails({
+  MIN_SECRET_BYTES: MIN_COMPATIBLE_SECRET_BYTES
+});
 
 export function generateOtp(secret: string, nowMs = Date.now()) {
-  const otp = authenticator.generate(secret);
+  const otp = generateSync({
+    secret,
+    digits: 6,
+    period: STEP_SECONDS,
+    epoch: Math.floor(nowMs / 1000),
+    guardrails: OTP_GUARDRAILS
+  });
   const expiresIn = getOtpExpiresIn(nowMs);
 
   return {
@@ -25,5 +30,5 @@ export function getOtpExpiresIn(nowMs = Date.now()) {
 }
 
 export function generateTotpSecret() {
-  return authenticator.generateSecret();
+  return generateSecret();
 }

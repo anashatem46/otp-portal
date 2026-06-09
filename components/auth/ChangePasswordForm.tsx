@@ -3,7 +3,7 @@
 import { LockKeyhole } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { buttonClass, inputClass } from "@/components/ui";
+import { buttonClass } from "@/components/ui";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 
 export function ChangePasswordForm() {
