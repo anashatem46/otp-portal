@@ -17,8 +17,10 @@ export function Modal({
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   const busyRef = useRef(busy);
-  closeRef.current = onClose;
-  busyRef.current = busy;
+  useEffect(() => {
+    closeRef.current = onClose;
+    busyRef.current = busy;
+  }, [onClose, busy]);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;

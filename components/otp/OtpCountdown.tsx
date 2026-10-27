@@ -13,7 +13,9 @@ export function OtpCountdown({
   const [initialRemainingMs] = useState(() => Math.max(0, expiresAt - Date.now()));
   const [seconds, setSeconds] = useState(() => Math.ceil(initialRemainingMs / 1000));
   const onExpireRef = useRef(onExpire);
-  onExpireRef.current = onExpire;
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
 
   useEffect(() => {
     let expired = false;

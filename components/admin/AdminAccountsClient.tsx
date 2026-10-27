@@ -24,7 +24,6 @@ import {
   CategoryBadge,
   cx,
   dangerButtonClass,
-  inputClass,
   secondaryButtonClass
 } from "@/components/ui";
 

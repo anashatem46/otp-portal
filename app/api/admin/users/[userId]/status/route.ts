@@ -5,19 +5,20 @@ import { requireAdmin } from "@/lib/session";
 import { userStatusSchema } from "@/lib/validation";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     userId: string;
-  };
+  }>;
 };
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const admin = await requireAdmin();
+    const { userId } = await params;
     const body = userStatusSchema.parse(await request.json());
 
     await setUserActiveStatus({
       adminId: admin.id,
-      userId: params.userId,
+      userId,
       isActive: body.isActive,
       metadata: getRequestMetadata(request)
     });

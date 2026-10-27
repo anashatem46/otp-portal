@@ -5,19 +5,20 @@ import { requireAdmin } from "@/lib/session";
 import { adjustViewsSchema } from "@/lib/validation";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     userId: string;
-  };
+  }>;
 };
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const admin = await requireAdmin();
+    const { userId } = await params;
     const body = adjustViewsSchema.parse(await request.json());
 
     const access = await adjustUserViews({
       adminId: admin.id,
-      userId: params.userId,
+      userId,
       accountId: body.accountId,
       deltaViews: body.deltaViews,
       metadata: getRequestMetadata(request)

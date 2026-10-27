@@ -21,6 +21,12 @@ Verification: 30 tests across 9 files pass, including interaction tests in jsdom
 
 Next: phase 2, covering OTP minimum lifetime and absolute expiry, persisted denied audits, accurate concurrent balances, and authentication/database failure behavior. Phases 3 and 4 remain queued; this first implementation does not claim those phases are complete.
 
+### Follow-up and integration with main
+
+- Replaced the once-per-second timer-bar steps with a continuous linear animation. Countdown labels use elapsed time from a client deadline and catch up on tab visibility changes. Exact server expiry and minimum usable lifetime remain phase 2 work.
+- Integrated the latest main branch while preserving its Next.js 16, React 19, OTP library, async route/cookie APIs, and deployment configuration. Updated DOM testing dependencies for React 19 and adjusted ref synchronization to satisfy the current React lint rules.
+- Integration verification: all 33 tests pass across 10 files; typecheck, lint, production build, and whitespace checks pass. Real-browser visual checks and live-database transaction tests remain outstanding.
+
 ## Findings in priority order
 
 ### 1. P1 — Modal components remount and discard form input

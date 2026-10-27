@@ -4,18 +4,19 @@ import { getRequestMetadata, jsonError } from "@/lib/http";
 import { requireAdmin } from "@/lib/session";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     userId: string;
-  };
+  }>;
 };
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   try {
     const admin = await requireAdmin();
+    const { userId } = await params;
 
     await deleteManagedUser({
       adminId: admin.id,
-      userId: params.userId,
+      userId,
       metadata: getRequestMetadata(request)
     });
 

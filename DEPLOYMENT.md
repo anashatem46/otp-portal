@@ -39,16 +39,11 @@ Use a long random `SESSION_SECRET`.
 1. Push this repo to GitHub.
 2. Import it in Vercel.
 3. Add the production environment variables.
-4. Deploy from Vercel. The Vercel build command runs production migrations with:
+4. Deploy from Vercel. The Vercel build command runs production migrations,
+   seeds the admin user from `SEED_ADMIN_*`, and builds the app with:
 
    ```sh
-   npm run prisma:migrate:deploy
-   ```
-
-5. Seed the first admin once against the production database:
-
-   ```sh
-   npm run seed
+   npm run prisma:migrate:deploy && npm run seed && npm run build
    ```
 
 ## Before Public Production

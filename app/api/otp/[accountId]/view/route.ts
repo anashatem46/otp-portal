@@ -6,14 +6,15 @@ import { requireOperationalUser } from "@/lib/session";
 import { viewOtpForUser } from "@/lib/otp-service";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     accountId: string;
-  };
+  }>;
 };
 
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const user = await requireOperationalUser();
+    const { accountId } = await params;
     const metadata = getRequestMetadata(request);
     await enforceRateLimit(
       `otp-view:${user.id}:${metadata.ipAddress ?? "unknown"}`
@@ -21,7 +22,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const result = await viewOtpForUser({
       userId: user.id,
-      accountId: params.accountId,
+      accountId,
       metadata,
       unlimited: user.role === Role.ADMIN
     });
