@@ -5,6 +5,10 @@ import { Role } from "@prisma/client";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import {
+  databaseUnavailableError,
+  isDatabaseUnavailableError
+} from "@/lib/database-errors";
 import { AppError } from "@/lib/errors";
 import type { RequestMetadata } from "@/lib/http";
 import {
@@ -19,6 +23,10 @@ export type AuthenticatedUser = Pick<
   User,
   "id" | "name" | "username" | "email" | "role" | "isActive" | "mustChangePassword"
 >;
+
+type GetCurrentUserOptions = {
+  allowDatabaseUnavailable?: boolean;
+};
 
 export async function createSession(userId: string, metadata: RequestMetadata) {
   const token = createRawSessionToken();
@@ -67,57 +75,77 @@ export async function deleteCurrentSession() {
     return;
   }
 
-  await prisma.session.deleteMany({
-    where: {
-      tokenHash: hashSessionToken(token)
+  try {
+    await prisma.session.deleteMany({
+      where: {
+        tokenHash: hashSessionToken(token)
+      }
+    });
+  } catch (error) {
+    if (!isDatabaseUnavailableError(error)) {
+      throw error;
     }
-  });
+  }
 }
 
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+export async function getCurrentUser(
+  options: GetCurrentUserOptions = {}
+): Promise<AuthenticatedUser | null> {
   const token = cookies().get(SESSION_COOKIE_NAME)?.value;
 
   if (!token) {
     return null;
   }
 
-  const session = await prisma.session.findUnique({
-    where: {
-      tokenHash: hashSessionToken(token)
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          email: true,
-          role: true,
-          isActive: true,
-          mustChangePassword: true
+  try {
+    const session = await prisma.session.findUnique({
+      where: {
+        tokenHash: hashSessionToken(token)
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            email: true,
+            role: true,
+            isActive: true,
+            mustChangePassword: true
+          }
         }
       }
-    }
-  });
-
-  if (!session) {
-    return null;
-  }
-
-  if (session.expiresAt <= new Date()) {
-    await prisma.session.delete({
-      where: {
-        id: session.id
-      }
     });
-    return null;
-  }
 
-  if (!session.user.isActive) {
-    return null;
-  }
+    if (!session) {
+      return null;
+    }
 
-  return session.user;
+    if (session.expiresAt <= new Date()) {
+      await prisma.session.delete({
+        where: {
+          id: session.id
+        }
+      });
+      return null;
+    }
+
+    if (!session.user.isActive) {
+      return null;
+    }
+
+    return session.user;
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      if (options.allowDatabaseUnavailable) {
+        return null;
+      }
+
+      throw databaseUnavailableError();
+    }
+
+    throw error;
+  }
 }
 
 export async function requireUser() {

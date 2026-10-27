@@ -1,13 +1,21 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  MessageSquare,
+  Plus,
+  XCircle
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { buttonClass, dangerButtonClass, EmptyState, StatusBadge } from "@/components/ui";
+import { useMemo, useState } from "react";
+import { buttonClass, cx, secondaryButtonClass } from "@/components/ui";
 
 type RequestRow = {
   id: string;
   requestedViews: number;
+  currentViews: number | null;
   reason: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   createdAt: string;
@@ -28,6 +36,27 @@ export function AdminRequestsClient({ requests }: { requests: RequestRow[] }) {
   const router = useRouter();
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Pending",
+        value: requests.filter((request) => request.status === "PENDING").length,
+        className: "text-amber-600"
+      },
+      {
+        label: "Approved",
+        value: requests.filter((request) => request.status === "APPROVED").length,
+        className: "text-emerald-600"
+      },
+      {
+        label: "Rejected",
+        value: requests.filter((request) => request.status === "REJECTED").length,
+        className: "text-red-600"
+      }
+    ],
+    [requests]
+  );
 
   async function review(requestId: string, action: "approve" | "reject") {
     setPending(`${requestId}:${action}`);
@@ -52,83 +81,141 @@ export function AdminRequestsClient({ requests }: { requests: RequestRow[] }) {
     router.refresh();
   }
 
+  function StatusPill({ status }: { status: RequestRow["status"] }) {
+    if (status === "APPROVED") {
+      return (
+        <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-emerald-50 px-3 text-sm font-bold text-emerald-700">
+          <CheckCircle2 size={16} />
+          Approved
+        </span>
+      );
+    }
+
+    if (status === "REJECTED") {
+      return (
+        <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-red-50 px-3 text-sm font-bold text-red-700">
+          <XCircle size={16} />
+          Rejected
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-amber-50 px-3 text-sm font-bold text-amber-600">
+        <Clock3 size={16} />
+        Pending
+      </span>
+    );
+  }
+
   return (
-    <section className="overflow-hidden rounded border border-line bg-white shadow-panel">
-      {error ? <p className="border-b border-line px-4 py-3 text-sm text-red-700">{error}</p> : null}
+    <div className="grid gap-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        {stats.map((stat) => (
+          <section
+            key={stat.label}
+            className="rounded-lg border border-line bg-white p-5 shadow-panel"
+          >
+            <p className={cx("text-2xl font-bold", stat.className)}>{stat.value}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{stat.label}</p>
+          </section>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        className="flex h-14 items-center justify-center gap-3 rounded-lg border border-dashed border-line text-base font-bold text-slate-500 transition hover:border-moss/40 hover:text-moss"
+      >
+        <Plus size={20} />
+        Request Additional Access
+      </button>
+
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          {error}
+        </div>
+      ) : null}
+
       {requests.length === 0 ? (
-        <EmptyState>No requests found.</EmptyState>
+        <section className="rounded-lg border border-line bg-white px-5 py-10 text-center text-sm font-semibold text-slate-500 shadow-panel">
+          No requests found.
+        </section>
       ) : (
-      <table className="w-full min-w-[920px] border-collapse text-left text-sm">
-        <thead className="bg-field text-xs uppercase text-slate-600">
-          <tr>
-            <th className="px-4 py-3">User</th>
-            <th className="px-4 py-3">Account</th>
-            <th className="px-4 py-3">Views</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Reason</th>
-            <th className="px-4 py-3">Reviewed by</th>
-            <th className="px-4 py-3">Created</th>
-            <th className="px-4 py-3">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+        <div className="grid gap-4">
           {requests.map((request) => (
-            <tr key={request.id} className="border-t border-line align-top">
-              <td className="px-4 py-3">
-                <span className="block font-medium">{request.user.username}</span>
-                <span className="block text-xs text-slate-500">{request.user.email}</span>
-              </td>
-              <td className="px-4 py-3">{request.account.name}</td>
-              <td className="px-4 py-3">{request.requestedViews}</td>
-              <td className="px-4 py-3">
-                <StatusBadge
-                  tone={
-                    request.status === "APPROVED"
-                      ? "green"
-                      : request.status === "REJECTED"
-                        ? "red"
-                        : "yellow"
-                  }
-                >
-                  {request.status.toLowerCase()}
-                </StatusBadge>
-              </td>
-              <td className="max-w-sm px-4 py-3 text-slate-600">{request.reason}</td>
-              <td className="px-4 py-3">{request.reviewer?.username ?? "none"}</td>
-              <td className="px-4 py-3 text-slate-600">{request.createdAt}</td>
-              <td className="px-4 py-3">
+            <section
+              key={request.id}
+              className="rounded-lg border border-line bg-white p-5 shadow-panel"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-bold text-ink">Quota Increase</h2>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold lowercase text-slate-500">
+                      {request.account.name}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">
+                    Requested by @{request.user.username} · {request.createdAt}
+                  </p>
+                </div>
+                <StatusPill status={request.status} />
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-base font-semibold text-slate-500">
+                <span>
+                  Current:{" "}
+                  <strong className="font-bold text-ink">
+                    {request.currentViews ?? 0}
+                  </strong>
+                </span>
+                <ArrowRight size={20} />
+                <span>
+                  Requested:{" "}
+                  <strong className="font-bold text-moss">
+                    {request.requestedViews}
+                  </strong>
+                </span>
+              </div>
+
+              <p className="mt-4 flex items-start gap-3 text-base font-semibold text-slate-500">
+                <MessageSquare size={20} className="mt-0.5 shrink-0" />
+                <span>{request.reason}</span>
+              </p>
+
+              <div className="mt-5 border-t border-line pt-5">
                 {request.status === "PENDING" ? (
-                  <div className="flex gap-2">
+                  <div className="grid gap-3 md:grid-cols-2">
                     <button
                       className={buttonClass}
                       onClick={() => review(request.id, "approve")}
                       disabled={pending !== ""}
                       title="Approve request"
                     >
-                      <Check size={16} />
+                      <CheckCircle2 size={18} />
                       Approve
                     </button>
                     <button
-                      className={dangerButtonClass}
+                      className={secondaryButtonClass}
                       onClick={() => review(request.id, "reject")}
                       disabled={pending !== ""}
                       title="Reject request"
                     >
-                      <X size={16} />
+                      <XCircle size={18} />
                       Reject
                     </button>
                   </div>
                 ) : (
-                  <span className="text-slate-500">
-                    {request.reviewedAt ?? "reviewed"}
-                  </span>
+                  <p className="text-sm font-semibold text-slate-500">
+                    Reviewed by @{request.reviewer?.username ?? "system"}
+                    {request.reviewedAt ? ` · ${request.reviewedAt}` : ""}
+                  </p>
                 )}
-              </td>
-            </tr>
+              </div>
+            </section>
           ))}
-        </tbody>
-      </table>
+        </div>
       )}
-    </section>
+    </div>
   );
 }

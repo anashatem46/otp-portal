@@ -8,6 +8,32 @@ import { generateOtp } from "@/lib/otp";
 
 type TransactionClient = Prisma.TransactionClient;
 
+const encryptedAccountSelect = {
+  id: true,
+  encryptedSecret: true,
+  iv: true,
+  authTag: true
+} satisfies Prisma.SharedAccountSelect;
+
+const accessForOtpSelect = {
+  id: true,
+  remainingViews: true,
+  account: {
+    select: {
+      ...encryptedAccountSelect,
+      isActive: true
+    }
+  }
+} satisfies Prisma.OtpAccessSelect;
+
+type EncryptedAccount = Prisma.SharedAccountGetPayload<{
+  select: typeof encryptedAccountSelect;
+}>;
+
+type OtpAccessForView = Prisma.OtpAccessGetPayload<{
+  select: typeof accessForOtpSelect;
+}>;
+
 type ViewOtpInput = {
   userId: string;
   accountId: string;
@@ -27,90 +53,60 @@ export async function consumeOtpView(
   tx: TransactionClient
 ) {
   if (input.unlimited) {
-    const account = await tx.sharedAccount.findFirst({
-      where: {
-        id: input.accountId,
-        isActive: true
-      }
-    });
-
-    if (!account) {
-      await tx.auditLog.create({
-        data: {
-          userId: input.userId,
-          accountId: input.accountId,
-          action: AUDIT_ACTIONS.OTP_BLOCKED,
-          ipAddress: input.metadata.ipAddress,
-          userAgent: input.metadata.userAgent,
-          metadata: {
-            reason: "ACCOUNT_NOT_FOUND_OR_INACTIVE",
-            unlimited: true
-          }
-        }
-      });
-
-      throw new AppError("Shared account not found", 404, "ACCOUNT_NOT_FOUND");
-    }
-
-    const secret = decryptSecret({
-      encryptedSecret: account.encryptedSecret,
-      iv: account.iv,
-      authTag: account.authTag
-    });
-    const result = generateOtp(secret);
-
-    await tx.auditLog.create({
-      data: {
-        userId: input.userId,
-        accountId: input.accountId,
-        action: AUDIT_ACTIONS.OTP_VIEWED,
-        ipAddress: input.metadata.ipAddress,
-        userAgent: input.metadata.userAgent,
-        metadata: {
-          unlimited: true
-        }
-      }
-    });
-
-    return result;
+    return consumeUnlimitedOtpView(input, tx);
   }
 
-  const access = await tx.otpAccess.findUnique({
-    where: {
-      userId_accountId: {
-        userId: input.userId,
-        accountId: input.accountId
-      }
-    },
-    include: {
-      account: true
-    }
+  return consumeLimitedOtpView(input, tx);
+}
+
+async function consumeUnlimitedOtpView(
+  input: ViewOtpInput,
+  tx: TransactionClient
+) {
+  const account = await findActiveAccount(input.accountId, tx);
+
+  if (!account) {
+    await auditOtpBlocked(input, tx, {
+      reason: "ACCOUNT_NOT_FOUND_OR_INACTIVE",
+      unlimited: true
+    });
+
+    throw new AppError("Shared account not found", 404, "ACCOUNT_NOT_FOUND");
+  }
+
+  const result = generateOtpForAccount(account);
+
+  await auditOtpViewed(input, tx, {
+    unlimited: true
   });
 
-  if (!access || !access.account.isActive || access.remainingViews <= 0) {
-    await tx.auditLog.create({
-      data: {
-        userId: input.userId,
-        accountId: input.accountId,
-        action: AUDIT_ACTIONS.OTP_BLOCKED,
-        ipAddress: input.metadata.ipAddress,
-        userAgent: input.metadata.userAgent,
-        metadata: {
-          reason: !access ? "NO_ACCESS_RECORD" : "NO_REMAINING_VIEWS"
+  return result;
+}
+
+async function consumeLimitedOtpView(
+  input: ViewOtpInput,
+  tx: TransactionClient
+) {
+  const access = await requireLimitedAccessCanView(
+    await tx.otpAccess.findUnique({
+      where: {
+        userId_accountId: {
+          userId: input.userId,
+          accountId: input.accountId
         }
-      }
-    });
+      },
+      select: accessForOtpSelect
+    }),
+    input,
+    tx
+  );
 
-    throw new AppError(
-      "No OTP views are available. Request more access.",
-      403,
-      "OTP_BLOCKED"
-    );
-  }
-
-  await tx.otpAccess.update({
+  const updateResult = await tx.otpAccess.updateMany({
     where: {
-      id: access.id
+      id: access.id,
+      remainingViews: {
+        gt: 0
+      }
     },
     data: {
       remainingViews: {
@@ -119,13 +115,80 @@ export async function consumeOtpView(
     }
   });
 
-  const secret = decryptSecret({
-    encryptedSecret: access.account.encryptedSecret,
-    iv: access.account.iv,
-    authTag: access.account.authTag
-  });
-  const result = generateOtp(secret);
+  if (updateResult.count !== 1) {
+    return blockLimitedOtpView(input, tx, "QUOTA_CONSUMED_CONCURRENTLY");
+  }
 
+  const result = generateOtpForAccount(access.account);
+
+  await auditOtpViewed(input, tx, {
+    remainingViewsAfter: access.remainingViews - 1
+  });
+
+  return result;
+}
+
+function generateOtpForAccount(account: EncryptedAccount) {
+  const secret = decryptSecret({
+    encryptedSecret: account.encryptedSecret,
+    iv: account.iv,
+    authTag: account.authTag
+  });
+
+  return generateOtp(secret);
+}
+
+async function findActiveAccount(accountId: string, tx: TransactionClient) {
+  return tx.sharedAccount.findFirst({
+    where: {
+      id: accountId,
+      isActive: true
+    },
+    select: encryptedAccountSelect
+  });
+}
+
+async function requireLimitedAccessCanView(
+  access: OtpAccessForView | null,
+  input: ViewOtpInput,
+  tx: TransactionClient
+): Promise<OtpAccessForView> {
+  if (!access) {
+    return blockLimitedOtpView(input, tx, "NO_ACCESS_RECORD");
+  }
+
+  if (!access.account.isActive) {
+    return blockLimitedOtpView(input, tx, "ACCOUNT_INACTIVE");
+  }
+
+  if (access.remainingViews <= 0) {
+    return blockLimitedOtpView(input, tx, "NO_REMAINING_VIEWS");
+  }
+
+  return access;
+}
+
+async function blockLimitedOtpView(
+  input: ViewOtpInput,
+  tx: TransactionClient,
+  reason: string
+): Promise<never> {
+  await auditOtpBlocked(input, tx, {
+    reason
+  });
+
+  throw new AppError(
+    "No OTP views are available. Request more access.",
+    403,
+    "OTP_BLOCKED"
+  );
+}
+
+async function auditOtpViewed(
+  input: ViewOtpInput,
+  tx: TransactionClient,
+  metadata: Prisma.InputJsonValue
+) {
   await tx.auditLog.create({
     data: {
       userId: input.userId,
@@ -133,11 +196,24 @@ export async function consumeOtpView(
       action: AUDIT_ACTIONS.OTP_VIEWED,
       ipAddress: input.metadata.ipAddress,
       userAgent: input.metadata.userAgent,
-      metadata: {
-        remainingViewsAfter: access.remainingViews - 1
-      }
+      metadata
     }
   });
+}
 
-  return result;
+async function auditOtpBlocked(
+  input: ViewOtpInput,
+  tx: TransactionClient,
+  metadata: Prisma.InputJsonValue
+) {
+  await tx.auditLog.create({
+    data: {
+      userId: input.userId,
+      accountId: input.accountId,
+      action: AUDIT_ACTIONS.OTP_BLOCKED,
+      ipAddress: input.metadata.ipAddress,
+      userAgent: input.metadata.userAgent,
+      metadata
+    }
+  });
 }

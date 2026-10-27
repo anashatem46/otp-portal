@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { buttonClass, inputClass } from "@/components/ui";
 import { PasswordInput } from "@/components/auth/PasswordInput";
+import { NEW_PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 
 export function ChangePasswordForm() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export function ChangePasswordForm() {
         <PasswordInput
           name="newPassword"
           autoComplete="new-password"
-          minLength={12}
+          minLength={NEW_PASSWORD_MIN_LENGTH}
           required
         />
       </label>

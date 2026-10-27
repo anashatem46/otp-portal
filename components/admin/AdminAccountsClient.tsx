@@ -1,17 +1,34 @@
 "use client";
 
-import { KeyRound, Plus, Save, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
+  CheckCircle2,
+  Copy,
+  Infinity as InfinityIcon,
+  KeyRound,
+  Pencil,
+  Plus,
+  Search,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+  WalletCards,
+  XCircle
+} from "lucide-react";
+import { FormEvent, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CreateAccountModal, AccountEditForm } from "@/components/admin/AccountForms";
+import { requestJson } from "@/lib/client-request";
+import {
+  AccountAvatar,
   buttonClass,
+  CategoryBadge,
+  cx,
   dangerButtonClass,
   inputClass,
-  secondaryButtonClass,
-  StatusBadge
+  secondaryButtonClass
 } from "@/components/ui";
 
-type AccountRow = {
+export type AccountRow = {
   id: string;
   name: string;
   category: string | null;
@@ -21,14 +38,60 @@ type AccountRow = {
   _count: {
     otpAccesses: number;
     accessRequests: number;
+    auditLogs?: number;
   };
 };
 
+
 export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState("");
+  const [search, setSearch] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+
+  const filteredAccounts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return accounts;
+
+    return accounts.filter(
+      (account) =>
+        account.name.toLowerCase().includes(query) ||
+        account.category?.toLowerCase().includes(query) ||
+        account.sharedByLabel?.toLowerCase().includes(query)
+    );
+  }, [accounts, search]);
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Total Accounts",
+        value: accounts.length.toLocaleString(),
+        icon: WalletCards,
+        className: "text-blue-600"
+      },
+      {
+        label: "Active Users",
+        value: accounts
+          .reduce((sum, account) => sum + account._count.otpAccesses, 0)
+          .toLocaleString(),
+        icon: CheckCircle2,
+        className: "text-emerald-600"
+      },
+      {
+        label: "Total Views",
+        value: accounts
+          .reduce((sum, account) => sum + (account._count.auditLogs ?? 0), 0)
+          .toLocaleString(),
+        icon: KeyRound,
+        className: "text-violet-600"
+      }
+    ],
+    [accounts]
+  );
 
   async function submitJson(
     url: string,
@@ -40,25 +103,17 @@ export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
     setMessage("");
     setPending(url);
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    const data = await response.json();
-
-    if (!response.ok) {
-      setError(data.error ?? "Request failed.");
-      setPending("");
+    try {
+      await requestJson(url, body, method);
+      setMessage(success);
+      startRefresh(() => router.refresh());
+      return true;
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to reach the server. Please try again.");
       return false;
+    } finally {
+      setPending("");
     }
-
-    setMessage(success);
-    setPending("");
-    router.refresh();
-    return true;
   }
 
   async function createAccount(event: FormEvent<HTMLFormElement>) {
@@ -70,28 +125,24 @@ export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
       {
         name: form.get("name"),
         category: form.get("category") || null,
-        sharedByLabel: form.get("sharedByLabel") || null,
+        sharedByLabel: form.get("sharedByLabel") || "system",
         totpSecret: form.get("totpSecret"),
         initialViewsForExistingUsers: form.get("initialViewsForExistingUsers"),
-        isActive: form.get("isActive") === "on"
+        isActive: true
       },
       "Account created."
     );
 
     if (ok) {
       formElement.reset();
+      setShowCreateForm(false);
     }
   }
 
-  async function updateAccount(
-    event: FormEvent<HTMLFormElement>,
-    accountId: string,
-    success = "Account updated."
-  ) {
+  async function updateAccount(event: FormEvent<HTMLFormElement>, accountId: string) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-
-    await submitJson(
+    const ok = await submitJson(
       `/api/admin/accounts/${accountId}`,
       {
         name: form.get("name"),
@@ -100,184 +151,267 @@ export function AdminAccountsClient({ accounts }: { accounts: AccountRow[] }) {
         totpSecret: form.get("totpSecret"),
         isActive: form.get("isActive") === "on"
       },
-      success,
+      "Account updated.",
+      "PATCH"
+    );
+
+    if (ok) {
+      setEditingAccountId(null);
+    }
+  }
+
+  function toggleAccount(account: AccountRow) {
+    void submitJson(
+      `/api/admin/accounts/${account.id}`,
+      {
+        name: account.name,
+        category: account.category,
+        sharedByLabel: account.sharedByLabel,
+        totpSecret: "",
+        isActive: !account.isActive
+      },
+      account.isActive ? "Account inactivated." : "Account activated.",
       "PATCH"
     );
   }
 
+  function deleteAccount(account: AccountRow) {
+    const confirmed = window.confirm(
+      `Delete ${account.name}? This removes its OTP access rows and requests.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    void submitJson(
+      `/api/admin/accounts/${account.id}`,
+      undefined,
+      "Account deleted.",
+      "DELETE"
+    );
+  }
+
+  function copyWithFallback(value: string) {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+      return document.execCommand("copy");
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+
+  async function copyAccountLabel(account: AccountRow) {
+    const value = `${account.name} (${account.category ?? "Uncategorized"})`;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else if (!copyWithFallback(value)) {
+        throw new Error("Clipboard fallback failed");
+      }
+      setMessage("Account label copied.");
+    } catch {
+      if (copyWithFallback(value)) {
+        setMessage("Account label copied.");
+      } else {
+        setError("Copy is unavailable in this browser context.");
+      }
+    }
+  }
+
+  function AccountStatus({ account }: { account: AccountRow }) {
+    if (account.isActive) {
+      return (
+        <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 text-xs font-bold text-emerald-700">
+          <CheckCircle2 size={14} />
+          Active
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-slate-100 px-2.5 text-xs font-bold text-slate-500">
+        <XCircle size={14} />
+        Inactive
+      </span>
+    );
+  }
+
+
   return (
     <div className="grid gap-5">
-      <section className="rounded border border-line bg-white p-4 shadow-panel">
-        <div className="mb-4 flex items-center gap-2">
-          <KeyRound size={18} className="text-moss" />
-          <h2 className="font-semibold">Add Shared Account</h2>
+      <div className="grid gap-4 md:grid-cols-3">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+
+          return (
+            <section key={stat.label} className="rounded-lg border border-line bg-white p-5 shadow-panel">
+              <div className="flex items-center gap-4">
+                <Icon size={22} className={stat.className} />
+                <div>
+                  <p className={cx("text-2xl font-bold", stat.className)}>{stat.value}</p>
+                  <p className="text-sm font-semibold text-slate-500">{stat.label}</p>
+                </div>
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="relative">
+          <Search
+            size={18}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+          />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search accounts..."
+            className="h-11 w-full rounded-lg border border-transparent bg-field pl-11 pr-4 text-sm font-semibold text-ink outline-none transition placeholder:text-slate-500 focus:border-moss focus:bg-white focus:ring-2 focus:ring-moss/15"
+          />
         </div>
-        <form className="grid gap-3" onSubmit={createAccount}>
-          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_160px_120px]">
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Account name
-              <input className={inputClass} name="name" required />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              TOTP secret
-              <input className={inputClass} name="totpSecret" required />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Initial views
-              <input
-                className={inputClass}
-                name="initialViewsForExistingUsers"
-                type="number"
-                min={0}
-                max={1000}
-                defaultValue={1}
-                required
-              />
-            </label>
-            <label className="flex items-end gap-2 pb-2 text-sm font-medium">
-              <input name="isActive" type="checkbox" defaultChecked />
-              Active
-            </label>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Category
-              <input className={inputClass} name="category" placeholder="e.g. AI, Dev, Design" />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Shared by label
-              <input className={inputClass} name="sharedByLabel" placeholder="e.g. system, anas" />
-            </label>
-          </div>
-          <div>
-            <button className={buttonClass} disabled={pending !== ""}>
-              <Plus size={16} />
-              {pending === "/api/admin/accounts" ? "Creating" : "Create account"}
-            </button>
-          </div>
-        </form>
-        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-sky-800">{message}</p> : null}
-      </section>
+        <button className={buttonClass} onClick={() => { setError(""); setShowCreateForm(true); }}>
+          <Plus size={18} />
+          Add Account
+        </button>
+      </div>
 
-      <section className="overflow-hidden rounded border border-line bg-white shadow-panel">
-        <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
-          <thead className="bg-field text-xs uppercase text-slate-600">
-            <tr>
-              <th className="px-4 py-3">Edit</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Access rows</th>
-              <th className="px-4 py-3">Requests</th>
-              <th className="px-4 py-3">Created</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((account) => (
-              <tr key={account.id} className="border-t border-line align-top">
-                <td className="px-4 py-3">
-                  <form
-                    className="grid gap-2"
-                    onSubmit={(event) => updateAccount(event, account.id)}
-                  >
-                    <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                      <label className="grid gap-1 text-xs font-medium text-slate-700">
-                        Name
-                        <input
-                          className={inputClass}
-                          name="name"
-                          defaultValue={account.name}
-                          required
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-medium text-slate-700">
-                        New TOTP secret
-                        <input
-                          className={inputClass}
-                          name="totpSecret"
-                          placeholder="Leave blank"
-                        />
-                      </label>
-                      <label className="flex items-end gap-2 pb-2 text-sm font-medium">
-                        <input
-                          name="isActive"
-                          type="checkbox"
-                          defaultChecked={account.isActive}
-                        />
-                        Active
-                      </label>
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          {error}
+        </div>
+      ) : null}
+      {message ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-800">
+          {message}
+        </div>
+      ) : null}
+
+      {filteredAccounts.length === 0 ? (
+        <section className="rounded-lg border border-dashed border-line bg-white px-5 py-12 text-center text-sm font-semibold text-slate-500">
+          No accounts match the current search.
+        </section>
+      ) : (
+        <div className="grid gap-4">
+          {filteredAccounts.map((account) => (
+            <section
+              key={account.id}
+              className="rounded-lg border border-line bg-white p-5 shadow-panel"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <AccountAvatar name={account.name} size="lg" />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-xl font-bold text-ink">{account.name}</h2>
+                      <AccountStatus account={account} />
                     </div>
-                    <button
-                      className={secondaryButtonClass}
-                      disabled={pending !== ""}
-                      title="Save account"
-                    >
-                      <Save size={16} />
-                      Save
-                    </button>
-                  </form>
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge tone={account.isActive ? "green" : "gray"}>
-                    {account.isActive ? "active" : "inactive"}
-                  </StatusBadge>
-                </td>
-                <td className="px-4 py-3">{account._count.otpAccesses}</td>
-                <td className="px-4 py-3">{account._count.accessRequests}</td>
-                <td className="px-4 py-3 text-slate-600">{account.createdAt}</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-2">
-                    <button
-                      className={secondaryButtonClass}
-                      disabled={pending !== ""}
-                      onClick={() =>
-                        void submitJson(
-                          `/api/admin/accounts/${account.id}`,
-                          {
-                            name: account.name,
-                            totpSecret: "",
-                            isActive: !account.isActive
-                          },
-                          account.isActive ? "Account inactivated." : "Account activated.",
-                          "PATCH"
-                        )
-                      }
-                      title={account.isActive ? "Inactivate account" : "Activate account"}
-                    >
-                      {account.isActive ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
-                      {account.isActive ? "Inactive" : "Activate"}
-                    </button>
-                    <button
-                      className={dangerButtonClass}
-                      disabled={pending !== ""}
-                      onClick={() => {
-                        const confirmed = window.confirm(
-                          `Delete ${account.name}? This removes its OTP access rows and requests.`
-                        );
-
-                        if (!confirmed) {
-                          return;
-                        }
-
-                        void submitJson(
-                          `/api/admin/accounts/${account.id}`,
-                          undefined,
-                          "Account deleted.",
-                          "DELETE"
-                        );
-                      }}
-                      title="Delete account"
-                    >
-                      <Trash2 size={16} />
-                      Delete
-                    </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500">
+                      {account.category ? <CategoryBadge category={account.category} /> : null}
+                      <span>by @{account.sharedByLabel ?? "system"}</span>
+                    </div>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-field hover:text-ink"
+                    onClick={() =>
+                      setEditingAccountId((current) =>
+                        current === account.id ? null : account.id
+                      )
+                    }
+                    title="Edit account"
+                  >
+                    <Pencil size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                    onClick={() => deleteAccount(account)}
+                    title="Delete account"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Created</p>
+                  <p className="mt-1 text-base font-bold text-ink">{account.createdAt}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Default Quota</p>
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-base font-bold text-ink">
+                    <InfinityIcon size={17} />
+                    Unlimited
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Shared With</p>
+                  <p className="mt-1 text-base font-bold text-ink">
+                    {account._count.otpAccesses} users
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Total Views</p>
+                  <p className="mt-1 text-base font-bold text-ink">
+                    {(account._count.auditLogs ?? 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center gap-3 rounded-lg bg-field px-4 py-3 text-sm font-semibold text-slate-500">
+                <KeyRound size={20} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">Encrypted TOTP secret stored</span>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white hover:text-ink"
+                  onClick={() => copyAccountLabel(account)}
+                  title="Copy account label"
+                >
+                  <Copy size={18} />
+                </button>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  className={secondaryButtonClass}
+                  onClick={() => toggleAccount(account)}
+                  disabled={pending !== "" || refreshing}
+                >
+                  {account.isActive ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
+                  {account.isActive ? "Inactivate" : "Activate"}
+                </button>
+                <button
+                  className={dangerButtonClass}
+                  onClick={() => deleteAccount(account)}
+                  disabled={pending !== "" || refreshing}
+                >
+                  <Trash2 size={16} />
+                  Delete
+                </button>
+              </div>
+
+              {editingAccountId === account.id ? <AccountEditForm account={account} pending={pending !== "" || refreshing} onSubmit={(event) => updateAccount(event, account.id)} /> : null}
+            </section>
+          ))}
+        </div>
+      )}
+
+      {showCreateForm ? <CreateAccountModal pending={pending !== "" || refreshing} error={error} onSubmit={createAccount} onClose={() => setShowCreateForm(false)} /> : null}
     </div>
   );
 }

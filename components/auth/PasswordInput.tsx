@@ -15,16 +15,17 @@ export function PasswordInput({ className, ...props }: PasswordInputProps) {
       <input
         {...props}
         type={visible ? "text" : "password"}
-        className={cx(inputClass, "pr-11", className)}
+        className={cx(inputClass, className, "password-field !pr-16")}
       />
       <button
         type="button"
-        className="absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-field"
+        className="absolute right-2 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg border border-transparent text-slate-500 transition hover:border-line hover:bg-white hover:text-ink focus-visible:border-moss focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss/20"
         onClick={() => setVisible((current) => !current)}
         title={visible ? "Hide password" : "Show password"}
         aria-label={visible ? "Hide password" : "Show password"}
+        aria-pressed={visible}
       >
-        <Icon size={16} />
+        <Icon size={22} />
       </button>
     </span>
   );

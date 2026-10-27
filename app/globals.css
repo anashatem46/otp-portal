@@ -4,10 +4,10 @@
 
 :root {
   color-scheme: light;
-  --background: #f9fafb;
+  --background: #f6f7f9;
   --foreground: #17201b;
 
-  /* Avatar palette — deterministic from account name hash */
+  /* Avatar palette - deterministic from account name hash */
   --avatar-emerald: #355e43;
   --avatar-teal: #0d9488;
   --avatar-blue: #2563eb;
@@ -42,10 +42,32 @@ code {
   font-variant-ligatures: none;
 }
 
+@keyframes otp-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-password-reveal-button {
+  display: none !important;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 /* Active nav tab indicator */
 .nav-tab-active {
-  color: #17201b;
-  font-weight: 600;
+  color: #1f7448;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .nav-tab-active::after {
@@ -55,6 +77,6 @@ code {
   left: 0;
   right: 0;
   height: 2px;
-  background: #355e43;
+  background: #1f7448;
   border-radius: 1px;
 }

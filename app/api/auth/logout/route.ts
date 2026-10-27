@@ -11,7 +11,7 @@ import {
 export async function POST(request: Request) {
   try {
     const metadata = getRequestMetadata(request);
-    const user = await getCurrentUser();
+    const user = await getCurrentUser({ allowDatabaseUnavailable: true });
 
     if (user) {
       await createAuditLog({

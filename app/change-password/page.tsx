@@ -4,7 +4,7 @@ import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function ChangePasswordPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ allowDatabaseUnavailable: true });
 
   if (!user) {
     redirect("/login");

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 
 export async function requirePageUser() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ allowDatabaseUnavailable: true });
 
   if (!user) {
     redirect("/login");
@@ -29,7 +29,7 @@ export async function requirePageAdmin() {
 }
 
 export async function redirectIfAuthenticated() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser({ allowDatabaseUnavailable: true });
 
   if (!user) {
     return;

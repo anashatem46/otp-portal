@@ -1,7 +1,6 @@
 import { authenticator } from "otplib";
 
 const STEP_SECONDS = 30;
-export const MIN_VISIBLE_OTP_SECONDS = 20;
 
 authenticator.options = {
   digits: 6,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NEW_PASSWORD_MIN_LENGTH, TEMPORARY_PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 
 export const loginSchema = z.object({
   usernameOrEmail: z.string().trim().min(1, "Enter a username or email."),
@@ -9,7 +10,7 @@ export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Enter your current password."),
   newPassword: z
     .string()
-    .min(12, "Use at least 12 characters for the new password.")
+    .min(NEW_PASSWORD_MIN_LENGTH, `Use at least ${NEW_PASSWORD_MIN_LENGTH} characters for the new password.`)
 });
 
 export const createUserSchema = z.object({
@@ -21,7 +22,7 @@ export const createUserSchema = z.object({
     .max(48)
     .regex(/^[a-zA-Z0-9._-]+$/, "Use letters, numbers, dots, underscores, or dashes."),
   email: z.string().trim().email().optional().or(z.literal("")),
-  temporaryPassword: z.string().min(8),
+  temporaryPassword: z.string().min(TEMPORARY_PASSWORD_MIN_LENGTH, `Use at least ${TEMPORARY_PASSWORD_MIN_LENGTH} characters.`),
   role: z.enum(["USER", "ADMIN"]),
   isActive: z.boolean(),
   initialAccess: z
@@ -57,7 +58,7 @@ export const requestMoreSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  temporaryPassword: z.string().min(8)
+  temporaryPassword: z.string().min(TEMPORARY_PASSWORD_MIN_LENGTH, `Use at least ${TEMPORARY_PASSWORD_MIN_LENGTH} characters.`)
 });
 
 export const userStatusSchema = z.object({

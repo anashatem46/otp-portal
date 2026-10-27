@@ -97,7 +97,7 @@ export default async function AdminHomePage() {
                 <span className="text-sm font-medium text-slate-600">{card.label}</span>
                 <Icon size={18} className="text-moss" />
               </div>
-              <p className="mt-3 text-3xl font-semibold">{card.value}</p>
+              <p className="mt-3 text-2xl font-semibold">{card.value}</p>
             </Link>
           );
         })}
@@ -118,6 +118,7 @@ export default async function AdminHomePage() {
             requests={pendingRequestRows.map((request) => ({
               id: request.id,
               requestedViews: request.requestedViews,
+              currentViews: null,
               reason: request.reason,
               status: request.status,
               createdAt: request.createdAt.toLocaleString(),

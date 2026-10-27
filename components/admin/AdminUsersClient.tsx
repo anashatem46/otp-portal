@@ -1,23 +1,43 @@
 "use client";
 
-import { Plus, RotateCcw, Shield, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Infinity as InfinityIcon,
+  KeyRound,
+  Mail,
+  MoreHorizontal,
+  Pencil,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  ToggleLeft,
+  ToggleRight,
+  Trash2,
+  UserPlus,
+  UsersRound,
+  XCircle
+} from "lucide-react";
+import { FormEvent, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { PasswordInput } from "@/components/auth/PasswordInput";
+import { CreateUserModal, ResetPasswordModal, AdjustViewsModal } from "@/components/admin/UserDialogs";
+import { requestJson } from "@/lib/client-request";
 import {
   buttonClass,
+  cx,
   dangerButtonClass,
   inputClass,
-  secondaryButtonClass,
-  StatusBadge
+  secondaryButtonClass
 } from "@/components/ui";
 
-type Account = {
+export type Account = {
   id: string;
   name: string;
 };
 
-type UserRow = {
+export type UserRow = {
   id: string;
   name: string | null;
   username: string;
@@ -25,11 +45,229 @@ type UserRow = {
   role: "USER" | "ADMIN";
   isActive: boolean;
   mustChangePassword: boolean;
+  joinedAt: string;
+  lastActiveAt: string;
   otpAccesses: Array<{
     remainingViews: number;
     account: Account;
   }>;
 };
+
+type RoleFilter = "ALL" | "USER" | "ADMIN";
+type StatusFilter = "ALL" | "ACTIVE" | "DISABLED" | "PENDING";
+
+const USER_AVATAR_COLORS = [
+  "bg-violet-500",
+  "bg-blue-500",
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-rose-500",
+  "bg-amber-500"
+];
+
+function hashString(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index++) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash);
+}
+
+function displayName(user: UserRow) {
+  return user.name?.trim() || user.username;
+}
+
+function userInitials(user: UserRow) {
+  return displayName(user)
+    .split(/[\s._-]+/)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function UserAvatar({ user }: { user: UserRow }) {
+  const colorClass = USER_AVATAR_COLORS[hashString(user.id) % USER_AVATAR_COLORS.length];
+
+  return (
+    <span
+      className={cx(
+        "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white",
+        colorClass
+      )}
+    >
+      {userInitials(user)}
+    </span>
+  );
+}
+
+function userViewTotal(user: UserRow) {
+  return user.otpAccesses.reduce((sum, access) => sum + access.remainingViews, 0);
+}
+
+type UserActionsProps = {
+  user: UserRow;
+  accounts: Account[];
+  busy: boolean;
+  onAdjust: (user: UserRow) => void;
+  onReset: (user: UserRow) => void;
+  onToggle: (user: UserRow) => void;
+  onDelete: (user: UserRow) => void;
+};
+
+function UserBadges({ user }: { user: UserRow }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span
+        className={cx(
+          "inline-flex h-6 items-center rounded-full px-2.5 text-xs font-bold",
+          user.role === "ADMIN"
+            ? "bg-violet-100 text-violet-700"
+            : "bg-blue-100 text-blue-700"
+        )}
+      >
+        {user.role === "ADMIN" ? "admin" : "user"}
+      </span>
+      <span
+        className={cx(
+          "inline-flex h-6 items-center gap-1.5 rounded-full px-2 text-xs font-bold",
+          user.isActive ? "text-emerald-700" : "text-red-700"
+        )}
+      >
+        <CheckCircle2 size={13} />
+        {user.isActive ? "Active" : "Disabled"}
+      </span>
+      {user.mustChangePassword ? (
+        <span className="inline-flex h-6 items-center rounded-full bg-amber-100 px-2 text-xs font-bold text-amber-700">
+          Pending
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function UserManagementControls({ user, compact = false, accounts, busy, onAdjust, onReset, onToggle, onDelete }: UserActionsProps & { compact?: boolean }) {
+  return (
+    <div className={cx("grid gap-3", compact ? "" : "min-w-[520px] grid-cols-[1fr_1fr_auto_auto]")}>
+      <button type="button" className={secondaryButtonClass} disabled={busy || accounts.length === 0 || user.role === "ADMIN"} onClick={() => onAdjust(user)}>
+        <Eye size={16} /> Adjust views
+      </button>
+
+      <button
+        type="button"
+        className={secondaryButtonClass}
+        onClick={() => onReset(user)}
+        disabled={busy}
+      >
+        <RotateCcw size={16} />
+        Reset password
+      </button>
+
+      <button
+        className={user.isActive ? dangerButtonClass : buttonClass}
+        onClick={() => onToggle(user)}
+        disabled={busy}
+      >
+        {user.isActive ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
+        {user.isActive ? "Disable" : "Enable"}
+      </button>
+
+      <button
+        className={dangerButtonClass}
+        onClick={() => onDelete(user)}
+        disabled={busy}
+        title="Delete user"
+      >
+        <Trash2 size={16} />
+        Delete
+      </button>
+    </div>
+  );
+}
+
+function UserStatusCell({ user }: { user: UserRow }) {
+  if (user.mustChangePassword) {
+    return (
+      <span className="inline-flex items-center gap-2 font-semibold text-amber-600">
+        <Clock3 size={18} />
+        Pending
+      </span>
+    );
+  }
+
+  if (!user.isActive) {
+    return (
+      <span className="inline-flex items-center gap-2 font-semibold text-slate-400">
+        <XCircle size={18} />
+        Inactive
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2 font-semibold text-emerald-600">
+      <CheckCircle2 size={18} />
+      Active
+    </span>
+  );
+}
+
+function OtpViewsCell({ user }: { user: UserRow }) {
+  if (user.role === "ADMIN") {
+    return (
+      <span className="inline-flex items-center justify-center font-bold text-moss">
+        <InfinityIcon size={20} />
+      </span>
+    );
+  }
+
+  return <span className="font-bold text-ink">{userViewTotal(user)} remaining</span>;
+}
+
+function UserActionsMenu({ user, accounts, busy, onAdjust, onReset, onToggle, onDelete }: UserActionsProps) {
+  return (
+    <details className="relative">
+      <summary aria-label={`Actions for ${user.username}`} className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full text-slate-500 transition hover:bg-field hover:text-ink [&::-webkit-details-marker]:hidden">
+        <MoreHorizontal size={20} />
+      </summary>
+      <div className="absolute right-0 top-10 z-20 w-72 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-[0_16px_40px_rgba(15,23,42,0.16)]">
+        <button type="button" className="flex w-full items-center gap-4 px-5 py-3 text-left text-lg font-bold text-ink hover:bg-field" onClick={() => onAdjust(user)} disabled={busy || accounts.length === 0 || user.role === "ADMIN"}>
+          <Eye size={22} /> Adjust views
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-4 px-5 py-3 text-left text-lg font-bold text-ink hover:bg-field"
+          onClick={() => onToggle(user)}
+          disabled={busy}
+        >
+          <Pencil size={22} className="text-slate-500" />
+          {user.isActive ? "Disable user" : "Enable user"}
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center gap-4 px-5 py-3 text-left text-lg font-bold text-ink hover:bg-field"
+          onClick={() => onReset(user)}
+          disabled={busy}
+        >
+          <KeyRound size={22} className="text-slate-500" />
+          Reset password
+        </button>
+        <div className="my-2 border-t border-line" />
+        <button
+          type="button"
+          className="flex w-full items-center gap-4 px-5 py-3 text-left text-lg font-bold text-red-600 hover:bg-red-50"
+          onClick={() => onDelete(user)}
+          disabled={busy}
+        >
+          <Trash2 size={22} />
+          Remove user
+        </button>
+      </div>
+    </details>
+  );
+}
 
 export function AdminUsersClient({
   users,
@@ -39,19 +277,66 @@ export function AdminUsersClient({
   accounts: Account[];
 }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState("");
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [resettingUser, setResettingUser] = useState<UserRow | null>(null);
+  const [adjustingUser, setAdjustingUser] = useState<UserRow | null>(null);
 
-  const defaultAccess = useMemo(
-    () =>
-      Object.fromEntries(accounts.map((account) => [account.id, 1])) as Record<
-        string,
-        number
-      >,
-    [accounts]
+  const stats = useMemo(
+    () => [
+      {
+        label: "Total Users",
+        value: users.length,
+        icon: UsersRound,
+        className: "bg-blue-100 text-blue-600"
+      },
+      {
+        label: "Active",
+        value: users.filter((user) => user.isActive).length,
+        icon: CheckCircle2,
+        className: "bg-emerald-100 text-emerald-600"
+      },
+      {
+        label: "Pending",
+        value: users.filter((user) => user.mustChangePassword).length,
+        icon: Clock3,
+        className: "bg-amber-100 text-amber-600"
+      },
+      {
+        label: "Admins",
+        value: users.filter((user) => user.role === "ADMIN").length,
+        icon: ShieldCheck,
+        className: "bg-violet-100 text-violet-600"
+      }
+    ],
+    [users]
   );
-  const [initialAccess, setInitialAccess] = useState(defaultAccess);
+
+  const filteredUsers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return users.filter((user) => {
+      const matchesSearch =
+        !query ||
+        displayName(user).toLowerCase().includes(query) ||
+        user.username.toLowerCase().includes(query) ||
+        user.email.toLowerCase().includes(query);
+      const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" && user.isActive) ||
+        (statusFilter === "DISABLED" && !user.isActive) ||
+        (statusFilter === "PENDING" && user.mustChangePassword);
+
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [roleFilter, search, statusFilter, users]);
 
   async function submitJson(
     url: string,
@@ -63,42 +348,36 @@ export function AdminUsersClient({
     setMessage("");
     setPending(url);
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    const data = await response.json();
-
-    if (!response.ok) {
-      setError(data.error ?? "Request failed.");
-      setPending("");
+    try {
+      const data = await requestJson<{ access?: { remainingViews: number } }>(url, body, method);
+      setMessage(data.access ? `Views adjusted. Remaining views: ${data.access.remainingViews}.` : success);
+      startRefresh(() => router.refresh());
+      return true;
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to reach the server. Please try again.");
       return false;
+    } finally {
+      setPending("");
     }
-
-    setMessage(success);
-    setPending("");
-    router.refresh();
-    return true;
   }
 
   async function createUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const role = form.get("role");
     const ok = await submitJson(
       "/api/admin/users",
       {
         name: form.get("name"),
-        username: form.get("username"),
+        username: String(form.get("username") ?? "").replace(/^@+/, ""),
+        email: form.get("email"),
         temporaryPassword: form.get("temporaryPassword"),
-        role: form.get("role"),
-        isActive: form.get("isActive") === "on",
-        initialAccess: Object.entries(initialAccess).map(([accountId, remainingViews]) => ({
+        role,
+        isActive: true,
+        initialAccess: role === "ADMIN" ? [] : form.getAll("accountId").map((accountId) => ({
           accountId,
-          remainingViews
+          remainingViews: Number(form.get("viewLimit"))
         }))
       },
       "User created."
@@ -106,236 +385,325 @@ export function AdminUsersClient({
 
     if (ok) {
       formElement.reset();
-      setInitialAccess(defaultAccess);
+      setShowCreateForm(false);
     }
   }
 
+  async function resetPassword(event: FormEvent<HTMLFormElement>, user: UserRow) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const ok = await submitJson(
+      `/api/admin/users/${user.id}/reset-password`,
+      {
+        temporaryPassword: form.get("temporaryPassword")
+      },
+      "Password reset."
+    );
+
+    if (ok) {
+      formElement.reset();
+      setResettingUser(null);
+    }
+  }
+
+  function deleteUser(user: UserRow) {
+    const confirmed = window.confirm(
+      `Delete ${user.username}? This removes their sessions, access rows, and requests.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    void submitJson(
+      `/api/admin/users/${user.id}`,
+      undefined,
+      "User deleted.",
+      "DELETE"
+    );
+  }
+
+  function toggleUserStatus(user: UserRow) {
+    void submitJson(
+      `/api/admin/users/${user.id}/status`,
+      {
+        isActive: !user.isActive
+      },
+      user.isActive ? "User disabled." : "User enabled."
+    );
+  }
+
+
+  const userActions = {
+    accounts,
+    busy: pending !== "" || refreshing,
+    onAdjust: (user: UserRow) => { setError(""); setAdjustingUser(user); },
+    onReset: (user: UserRow) => { setError(""); setResettingUser(user); },
+    onToggle: toggleUserStatus,
+    onDelete: deleteUser
+  };
+
   return (
     <div className="grid gap-5">
-      <section className="rounded border border-line bg-white p-4 shadow-panel">
-        <div className="mb-4 flex items-center gap-2">
-          <Shield size={18} className="text-moss" />
-          <h2 className="font-semibold">Create User</h2>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+
+          return (
+            <section
+              key={stat.label}
+              className="rounded-lg border border-line bg-white p-4 shadow-panel"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={cx(
+                    "flex h-10 w-10 items-center justify-center rounded-lg",
+                    stat.className
+                  )}
+                >
+                  <Icon size={20} />
+                </span>
+                <div>
+                  <p className="text-2xl font-bold text-ink">{stat.value}</p>
+                  <p className="text-sm font-semibold text-slate-500">
+                    {stat.label}
+                  </p>
+                </div>
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          {error}
         </div>
-        <form className="grid gap-3" onSubmit={createUser}>
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Name
-              <input className={inputClass} name="name" />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Username
-              <input className={inputClass} name="username" required />
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Temporary password
-              <PasswordInput name="temporaryPassword" minLength={8} required />
-            </label>
+      ) : null}
+      {message ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-800">
+          {message}
+        </div>
+      ) : null}
+
+      <section className="overflow-hidden rounded-lg border border-line bg-white shadow-panel">
+        <div className="grid gap-3 border-b border-line p-5 lg:grid-cols-[minmax(280px,1fr)_154px_170px_auto]">
+          <div className="relative">
+            <Search
+              size={18}
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+            />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, username, email..."
+              className="h-11 w-full rounded-lg border border-line bg-field pl-11 pr-4 text-sm font-semibold text-ink outline-none transition placeholder:text-slate-500 focus:border-moss focus:bg-white focus:ring-2 focus:ring-moss/15"
+            />
           </div>
-          <div className="grid gap-3 md:grid-cols-[180px_160px_1fr]">
-            <label className="grid gap-1 text-xs font-medium text-slate-700">
-              Role
-              <select className={inputClass} name="role" defaultValue="USER">
-                <option value="USER">User</option>
-                <option value="ADMIN">Admin</option>
-              </select>
-            </label>
-            <label className="flex items-end gap-2 pb-2 text-sm font-medium">
-              <input name="isActive" type="checkbox" defaultChecked />
-              Active
-            </label>
-            <div className="grid gap-2 rounded border border-line bg-field p-3">
-              <span className="text-xs font-semibold uppercase text-slate-600">Initial views</span>
-              <div className="grid gap-2 md:grid-cols-3">
-                {accounts.map((account) => (
-                  <label key={account.id} className="grid gap-1 text-xs font-medium text-slate-700">
-                    {account.name}
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min={0}
-                      max={1000}
-                      value={initialAccess[account.id] ?? 0}
-                      onChange={(event) =>
-                        setInitialAccess((current) => ({
-                          ...current,
-                          [account.id]: Number(event.target.value)
-                        }))
-                      }
-                    />
-                  </label>
-                ))}
+
+          <select
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
+            className="h-11 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink outline-none focus:border-moss focus:ring-2 focus:ring-moss/15"
+          >
+            <option value="ALL">All roles</option>
+            <option value="ADMIN">Admins</option>
+            <option value="USER">Users</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+            className="h-11 rounded-lg border border-line bg-white px-3 text-sm font-semibold text-ink outline-none focus:border-moss focus:ring-2 focus:ring-moss/15"
+          >
+            <option value="ALL">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="DISABLED">Disabled</option>
+            <option value="PENDING">Pending</option>
+          </select>
+          <button
+            type="button"
+            className={cx(buttonClass, "whitespace-nowrap")}
+            onClick={() => { setError(""); setShowCreateForm(true); }}
+          >
+            <UserPlus size={22} />
+            <span className="hidden sm:inline">Create user</span>
+          </button>
+        </div>
+
+        {filteredUsers.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm font-medium text-slate-500">
+            No users match the current filters.
+          </div>
+        ) : (
+          <>
+            <div className="divide-y divide-line md:hidden">
+              {filteredUsers.map((user) => (
+                <details key={user.id} className="group">
+                  <summary className="list-none cursor-pointer px-4 py-4 [&::-webkit-details-marker]:hidden">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-line"
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={`Select ${user.username}`}
+                      />
+                      <UserAvatar user={user} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-ink">
+                              {displayName(user)}
+                            </p>
+                            <p className="truncate text-xs font-semibold text-slate-500">
+                              @{user.username}
+                            </p>
+                            <p className="truncate text-xs font-semibold text-slate-500">
+                              {user.email}
+                            </p>
+                          </div>
+                          <MoreHorizontal
+                            size={18}
+                            className="mt-0.5 shrink-0 text-slate-500 transition group-open:rotate-90"
+                          />
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <UserBadges user={user} />
+                          <span className="shrink-0 text-moss">
+                            {user.role === "ADMIN" ? (
+                              <InfinityIcon size={18} />
+                            ) : (
+                              <span className="text-sm font-bold text-ink">
+                                {userViewTotal(user)}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="border-t border-line bg-[#fbfcfd] p-4">
+                    <UserManagementControls {...userActions} user={user} compact />
+                  </div>
+                </details>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[1360px] border-collapse text-left">
+                <thead className="bg-field text-base font-bold uppercase text-slate-500">
+                  <tr>
+                    <th className="w-14 px-6 py-5">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 rounded border-line"
+                        aria-label="Select all users"
+                      />
+                    </th>
+                    <th className="px-4 py-5">
+                      <span className="inline-flex items-center gap-2">
+                        <UsersRound size={18} />
+                        User
+                      </span>
+                    </th>
+                    <th className="px-4 py-5">
+                      <span className="inline-flex items-center gap-2">
+                        <Mail size={18} />
+                        Email
+                      </span>
+                    </th>
+                    <th className="px-4 py-5">Role</th>
+                    <th className="px-4 py-5">Status</th>
+                    <th className="px-4 py-5">
+                      <span className="inline-flex items-center gap-2">
+                        <CalendarDays size={18} />
+                        Joined
+                      </span>
+                    </th>
+                    <th className="px-4 py-5">Last active</th>
+                    <th className="px-4 py-5 text-center">
+                      <Eye size={18} className="mx-auto" />
+                    </th>
+                    <th className="px-4 py-5 text-center">OTP views</th>
+                    <th className="w-16 px-4 py-5" />
+                  </tr>
+                </thead>
+                <tbody className="text-base">
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id} className="border-t border-line align-middle">
+                      <td className="px-6 py-5">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 rounded border-line"
+                          aria-label={`Select ${user.username}`}
+                        />
+                      </td>
+                      <td className="px-4 py-5">
+                        <div className="flex items-center gap-4">
+                          <UserAvatar user={user} />
+                          <div className="min-w-0">
+                            <span className="block font-bold text-ink">
+                              {displayName(user)}
+                            </span>
+                            <span className="block text-base font-semibold text-slate-500">
+                              @{user.username}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-5 font-medium text-slate-500">
+                        {user.email}
+                      </td>
+                      <td className="px-4 py-5">
+                        <span
+                          className={cx(
+                            "inline-flex h-7 items-center rounded-full px-3 text-sm font-bold",
+                            user.role === "ADMIN"
+                              ? "bg-violet-100 text-violet-700"
+                              : "bg-blue-100 text-blue-700"
+                          )}
+                        >
+                          {user.role === "ADMIN" ? "admin" : "user"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-5">
+                        <UserStatusCell user={user} />
+                      </td>
+                      <td className="px-4 py-5 font-medium text-slate-500">
+                        {user.joinedAt}
+                      </td>
+                      <td className="px-4 py-5 font-medium text-slate-500">
+                        {user.lastActiveAt}
+                      </td>
+                      <td className="px-4 py-5" />
+                      <td className="px-4 py-5">
+                        <OtpViewsCell user={user} />
+                      </td>
+                      <td className="px-4 py-5">
+                        <UserActionsMenu {...userActions} user={user} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex items-center justify-between border-t border-line px-6 py-4 text-lg font-medium text-slate-500">
+                <span>
+                  {filteredUsers.length} of {users.length} users
+                </span>
+                <span>Page 1 of 1</span>
               </div>
             </div>
-          </div>
-          <button className={buttonClass} disabled={pending !== ""}>
-            <Plus size={16} />
-            Create user
-          </button>
-        </form>
-        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-sky-800">{message}</p> : null}
+          </>
+        )}
       </section>
-
-      <section className="overflow-hidden rounded border border-line bg-white shadow-panel">
-        <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
-          <thead className="bg-field text-xs uppercase text-slate-600">
-            <tr>
-              <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Views</th>
-              <th className="px-4 py-3">Adjust</th>
-              <th className="px-4 py-3">Reset</th>
-              <th className="px-4 py-3">Access</th>
-              <th className="px-4 py-3">Delete</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-t border-line align-top">
-                <td className="px-4 py-3">
-                  <span className="block font-medium">{user.username}</span>
-                  <span className="block text-xs text-slate-500">{user.email}</span>
-                  {user.name ? <span className="block text-xs text-slate-500">{user.name}</span> : null}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge tone={user.role === "ADMIN" ? "blue" : "gray"}>
-                    {user.role.toLowerCase()}
-                  </StatusBadge>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-1">
-                    <StatusBadge tone={user.isActive ? "green" : "red"}>
-                      {user.isActive ? "active" : "disabled"}
-                    </StatusBadge>
-                    {user.mustChangePassword ? (
-                      <StatusBadge tone="yellow">password change</StatusBadge>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="grid gap-1">
-                    {accounts.map((account) => {
-                      const access = user.otpAccesses.find(
-                        (row) => row.account.id === account.id
-                      );
-
-                      return (
-                        <span key={account.id} className="text-xs text-slate-700">
-                          {account.name}:{" "}
-                          <strong>{access?.remainingViews ?? 0}</strong>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <form
-                    className="grid gap-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const form = new FormData(event.currentTarget);
-                      void submitJson(
-                        `/api/admin/users/${user.id}/views`,
-                        {
-                          accountId: form.get("accountId"),
-                          deltaViews: form.get("deltaViews")
-                        },
-                        "Views adjusted."
-                      );
-                    }}
-                  >
-                    <select className={inputClass} name="accountId">
-                      {accounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input className={inputClass} name="deltaViews" type="number" defaultValue={1} />
-                    <button className={secondaryButtonClass} disabled={pending !== ""}>
-                      Apply
-                    </button>
-                  </form>
-                </td>
-                <td className="px-4 py-3">
-                  <form
-                    className="grid gap-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const formElement = event.currentTarget;
-                      const form = new FormData(formElement);
-                      void submitJson(
-                        `/api/admin/users/${user.id}/reset-password`,
-                        {
-                          temporaryPassword: form.get("temporaryPassword")
-                        },
-                        "Password reset."
-                      );
-                      formElement.reset();
-                    }}
-                  >
-                    <PasswordInput
-                      name="temporaryPassword"
-                      minLength={8}
-                      required
-                    />
-                    <button className={secondaryButtonClass} disabled={pending !== ""}>
-                      <RotateCcw size={16} />
-                      Reset
-                    </button>
-                  </form>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    className={user.isActive ? dangerButtonClass : buttonClass}
-                    onClick={() =>
-                      void submitJson(
-                        `/api/admin/users/${user.id}/status`,
-                        {
-                          isActive: !user.isActive
-                        },
-                        user.isActive ? "User disabled." : "User enabled."
-                      )
-                    }
-                    disabled={pending !== ""}
-                  >
-                    {user.isActive ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
-                    {user.isActive ? "Disable" : "Enable"}
-                  </button>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    className={dangerButtonClass}
-                    onClick={() => {
-                      const confirmed = window.confirm(
-                        `Delete ${user.username}? This removes their sessions, access rows, and requests.`
-                      );
-
-                      if (!confirmed) {
-                        return;
-                      }
-
-                      void submitJson(
-                        `/api/admin/users/${user.id}`,
-                        undefined,
-                        "User deleted.",
-                        "DELETE"
-                      );
-                    }}
-                    disabled={pending !== ""}
-                    title="Delete user"
-                  >
-                    <Trash2 size={16} />
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      {showCreateForm ? <CreateUserModal accounts={accounts} onSubmit={createUser} onClose={() => setShowCreateForm(false)} pending={pending !== "" || refreshing} error={error} /> : null}
+      {resettingUser ? <ResetPasswordModal user={resettingUser} onSubmit={(event) => resetPassword(event, resettingUser)} onClose={() => setResettingUser(null)} pending={pending !== "" || refreshing} error={error} /> : null}
+      {adjustingUser ? <AdjustViewsModal user={adjustingUser} accounts={accounts} onClose={() => setAdjustingUser(null)} pending={pending !== "" || refreshing} error={error} onSubmit={async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const ok = await submitJson(`/api/admin/users/${adjustingUser.id}/views`, { accountId: form.get("accountId"), deltaViews: form.get("deltaViews") }, "Views adjusted.");
+        if (ok) setAdjustingUser(null);
+      }} /> : null}
     </div>
   );
 }

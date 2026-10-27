@@ -12,9 +12,9 @@ const config: Config = {
       },
       colors: {
         ink: "#17201b",
-        field: "#f4f6f3",
-        line: "#d9dfd6",
-        moss: "#355e43",
+        field: "#f6f7f9",
+        line: "#e3e7e4",
+        moss: "#1f7448",
         coral: "#bf5d46",
         amber: "#b7791f",
         sky: "#256f8c"
@@ -28,4 +28,3 @@ const config: Config = {
 };
 
 export default config;
-

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createUserSchema, requestMoreSchema } from "@/lib/validation";
+import { createUserSchema, requestMoreSchema, resetPasswordSchema } from "@/lib/validation";
 
 describe("input validation", () => {
   it("accepts valid user creation payloads", () => {
@@ -25,5 +25,14 @@ describe("input validation", () => {
         reason: "Need more views"
       })
     ).toThrow();
+  });
+
+  it.each(["123456", "1234567"])("rejects short managed passwords: %s", (password) => {
+    expect(resetPasswordSchema.safeParse({ temporaryPassword: password }).success).toBe(false);
+    expect(createUserSchema.safeParse({ username: "jane", temporaryPassword: password, role: "USER", isActive: true }).success).toBe(false);
+  });
+
+  it("accepts an eight-character managed password", () => {
+    expect(resetPasswordSchema.parse({ temporaryPassword: "12345678" }).temporaryPassword).toBe("12345678");
   });
 });

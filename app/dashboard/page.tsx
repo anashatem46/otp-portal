@@ -32,14 +32,18 @@ export default async function DashboardPage() {
   return (
     <AppShell user={user}>
       <DashboardClient
-        accounts={accounts.map((account) => ({
-          id: account.id,
-          name: account.name,
-          category: account.category ?? undefined,
-          sharedByLabel: account.sharedByLabel ?? undefined,
-          remainingViews: account.otpAccesses[0]?.remainingViews ?? 0,
-          isUnlimited: user.role === Role.ADMIN
-        }))}
+        accounts={accounts.map((account) => {
+          const access = account.otpAccesses[0];
+
+          return {
+            id: account.id,
+            name: account.name,
+            category: account.category ?? undefined,
+            sharedByLabel: account.sharedByLabel ?? undefined,
+            remainingViews: access?.remainingViews ?? 0,
+            isUnlimited: user.role === Role.ADMIN
+          };
+        })}
       />
     </AppShell>
   );

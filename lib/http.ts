@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
+import {
+  databaseUnavailableError,
+  isDatabaseUnavailableError
+} from "@/lib/database-errors";
 import { AppError } from "@/lib/errors";
 
 export type RequestMetadata = {
@@ -21,10 +26,29 @@ export function getRequestMetadata(request: Request): RequestMetadata {
 }
 
 export function jsonError(error: unknown) {
+  if (isDatabaseUnavailableError(error)) {
+    const unavailableError = databaseUnavailableError();
+
+    return NextResponse.json(
+      { error: unavailableError.message, code: unavailableError.code },
+      { status: unavailableError.status }
+    );
+  }
+
   if (error instanceof AppError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status }
+    );
+  }
+
+  if (error instanceof ZodError) {
+    return NextResponse.json(
+      {
+        error: error.issues[0]?.message ?? "Invalid request.",
+        code: "VALIDATION_ERROR"
+      },
+      { status: 400 }
     );
   }
 
