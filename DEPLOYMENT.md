@@ -5,6 +5,8 @@
 - Vercel project connected to this Git repo
 - Neon PostgreSQL database
 
+Use Node.js 24. The `engines.node` setting in `package.json` selects `24.x` for Vercel builds; set the project's Node.js Version to `24.x` if it has a separate runtime setting.
+
 ## Production Environment Variables
 
 Set these in Vercel before the first deployment:
@@ -48,7 +50,7 @@ Use a long random `SESSION_SECRET`.
 
 ## Before Public Production
 
-- Upgrade Next.js to a patched release compatible with Node 20.
+- Keep Next.js patched and compatible with Node.js 24.
 - Run `npm audit` and address production vulnerabilities.
 - Replace local development credentials.
 - Keep `.env` out of Git.

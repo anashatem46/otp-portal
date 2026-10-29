@@ -4,6 +4,8 @@ Internal Next.js portal for controlled access to shared TOTP codes.
 
 ## Setup
 
+Use Node.js 24 (`nvm use` reads the version from `.nvmrc`).
+
 1. Install dependencies:
 
    ```sh
@@ -69,4 +71,4 @@ npm run build
 
 ## Security Note
 
-This repo targets Node `20.x` for production. Before a real public deployment, move Next.js to a patched release line and run `npm audit`; the current local dependency set was pinned while developing on an older local Node runtime.
+This repo targets Node `24.x` for local development and production. Keep Next.js patched and run `npm audit` before public deployments.

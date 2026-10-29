@@ -16,7 +16,7 @@
     "seed": "tsx scripts/seed-admin.ts"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
