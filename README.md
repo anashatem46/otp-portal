@@ -1,15 +1,28 @@
 # OTP Sharing Portal
 
-An internal web app for teams that need controlled access to time-based one-time passwords (TOTP) for shared accounts. Team members can reveal a six-digit code on demand from their dashboard. The portal generates codes on the server and stores the underlying TOTP secrets encrypted.
+OTP Sharing Portal gives teams a central place to access two-factor authentication codes for shared accounts. When a shared service asks for a time-based one-time password (TOTP), a team member opens the portal, reveals the current six-digit code, and copies it into the service’s sign-in screen. The portal generates codes on the server and stores the underlying TOTP secrets encrypted.
 
 ## How it works
 
-| Team members | Administrators |
-| --- | --- |
-| Reveal a code and see how long it remains valid. | Add shared accounts and manage users. |
-| Check remaining views for each account and request more access. | Set view quotas, approve or reject requests, and review the audit log. |
+The screenshots below use fictional accounts and demo data.
 
-Each reveal by a team member uses one view for that account. Approving a request adds the requested views to the member’s quota.
+### Reveal a code from the dashboard
+
+Choose a shared account and select **View OTP**. The dashboard shows the code, a copy button, and a countdown to expiration. Each reveal uses one view from the member’s quota for that account. When the quota runs out, the member can select **Request more OTP** and track the request under **Requests**.
+
+![Member dashboard showing a revealed six-digit code, its expiration countdown, remaining views, and an account with no views available](docs/screenshots/member-dashboard.png)
+
+### Review requests for more views
+
+Admins can see who requested access, the account, the reason, and the number of views requested. They can approve or reject the request. Approval adds the requested views to the member’s quota for that account.
+
+![Admin Requests page showing a pending request for three Cloud Console views and the review actions](docs/screenshots/admin-requests.png)
+
+### Manage shared accounts
+
+Admins add accounts with Base32 TOTP secrets, activate or deactivate accounts, and manage view quotas. The **Audit** page records activity such as code reveals and request decisions.
+
+![Admin Accounts page showing the Add Account button and an account’s category, status, and management actions](docs/screenshots/admin-accounts.png)
 
 ## Run locally
 
